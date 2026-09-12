@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b1f15">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>无界连锁 · Unbounded Chain</title>
+<link rel="stylesheet" href="css/style.css?v=24">
+</head>
+<body>
+<canvas id="fxCanvas"></canvas>
+
+<!-- ==================================================
+     大厅
+     ================================================== -->
+<div id="lobby" class="wrap">
+  <!-- 顶部档案 -->
+  <div class="profile-bar">
+    <div class="avatar" id="avatar">🎴</div>
+    <div class="p-info">
+      <div class="p-name-row">
+        <div class="p-name" id="playerName">无名大师</div>
+        <div class="rank-badge" id="rankBadge">青铜 III</div>
+      </div>
+      <div class="title-chip" id="titleChip" style="display:none"></div>
+      <div class="exp-bar"><div class="exp-fill" id="expFill" style="width:0%"></div></div>
+      <div class="exp-txt">
+        <span>Lv.<b id="lvText" style="color:#f5d97a">1</b></span>
+        <span id="expText">0 / 100 EXP</span>
+      </div>
+    </div>
+    <div class="currency-row">
+      <div class="currency coin"><span class="icon">💰</span><span id="coinText">0</span></div>
+      <div class="currency gem"><span class="icon">💎</span><span id="gemText">0</span></div>
+      <div class="currency streak"><span class="icon">🔥</span><span id="streakText">0</span></div>
+    </div>
+  </div>
+
+  <!-- 开始按钮 -->
+  <button class="start-btn" id="startBtn">
+    ⚔ 开始对局
+    <span class="start-sub" id="startSub">击败 3 名对手，赢取金币与段位分</span>
+  </button>
+
+  <!-- 主区 -->
+  <div class="lobby-main">
+    <!-- 局域网联机（放在最前，这是主要的开玩方式之一） -->
+    <div class="panel" id="netPanel">
+      <div class="panel-title">🌐 局域网联机 <span class="badge-new">同 Wi-Fi 直连</span></div>
+      <div id="netBody"></div>
+    </div>
+
+    <!-- 每日任务 -->
+    <div class="panel">
+      <div class="panel-title">📋 每日任务 <span style="font-size:11px;color:#8fa89a;font-weight:400;letter-spacing:0" id="taskResetTip"></span></div>
+      <div class="task-list" id="taskList"></div>
+    </div>
+
+    <!-- 排行榜 -->
+    <div class="panel">
+      <div class="panel-title">🏆 段位排行榜</div>
+      <div id="leaderList"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(212,175,55,.15);font-size:12px;color:#8fa89a;line-height:1.7">
+        <div>📊 总对局：<b style="color:#f5d97a" id="statTotal">0</b></div>
+        <div>🏆 获胜：<b style="color:#7fd4a8" id="statWins">0</b>　·　💀 失败：<b style="color:#ff5c5c" id="statLosses">0</b></div>
+        <div>🔥 最高连胜：<b style="color:#ff7b5c" id="statBestStreak">0</b></div>
+        <div>💰 累计收入 <b style="color:#f5d97a" id="statEarn">0</b>　支出 <b style="color:#ff9f6e" id="statSpend">0</b></div>
+        <div>💎 钻石收入 <b style="color:#b17aff" id="statEarnGem">0</b>　消费 <b style="color:#ff9f6e" id="statSpendGem">0</b></div>
+      </div>
+    </div>
+
+    <!-- 商店 -->
+    <div class="panel">
+      <div class="panel-title">🛍 商店 <span class="shop-balance" id="shopBalance"></span></div>
+      <div class="shop-tabs" id="shopTabs"></div>
+      <div class="shop-grid" id="shopGrid"></div>
+    </div>
+
+    <!-- 成就 -->
+    <div class="panel">
+      <div class="panel-title">🎖 成就墙</div>
+      <div class="ach-grid" id="achGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================
+     游戏
+     ================================================== -->
+<div id="game" class="wrap hidden">
+  <header class="g-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn-back" id="btnBackLobby">← 返回大厅</button>
+      <h1>无界连锁</h1>
+    </div>
+    <div class="deck-info">牌堆 <b id="deckLeft">52</b></div>
+  </header>
+
+  <div class="guide" id="guide"></div>
+
+  <div class="main">
+    <div class="board-wrap">
+      <div class="apbar">
+        <div class="left">
+          <span>行动点 <b id="ap">1</b></span>
+          <span class="timer" id="timer">⏱ 30s</span>
+        </div>
+        <span style="color:#7c9488;font-size:11.5px">绿=可落子 · 金=能连锁 · <b style="color:#ff5c5c">红=可吃牌</b></span>
+      </div>
+
+      <!-- 牌桌：棋盘居中，四家围坐（你在下方） -->
+      <div class="game-stage">
+        <div class="seat seat-top"    id="seatTop"></div>
+        <div class="seat seat-left"   id="seatLeft"></div>
+        <div class="board" id="board"></div>
+        <div class="seat seat-right"  id="seatRight"></div>
+        <div class="seat seat-bottom" id="seatBottom"></div>
+      </div>
+    </div>
+    <div class="log-panel" id="logPanel">
+      <div class="log-header" id="logHeader">
+        <span>📜 活动日志</span>
+        <span class="tgl"><span id="logCount">0</span> 条 <span class="arrow">▼</span></span>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <details style="font-size:12px;color:#7c9488;padding:0 4px;line-height:1.7;margin-top:10px">
+    <summary style="cursor:pointer;color:#a8bfb2">📖 规则速查</summary>
+    <div style="margin-top:8px">
+      <b>棋盘</b>：7×7 · <b>玩家</b>：你 + 3 AI · <b>牌堆</b>：52 张<br>
+      <b>开局</b>：掷骰定先手，后手第一回合 <b>+1 AP</b> 作为补偿<br>
+      <b style="color:#7fd4a8">抽牌</b>：<span style="color:#7fd4a8">每回合开始系统自动抽 1 张，<b>不消耗 AP</b>，无需手动操作</span><br>
+      <b>AP</b>：每回合 1 基础 + 连锁返还（最多 +10）+ 上回合保留<br>
+      <b style="color:#b17aff">保留机制</b>：<span style="color:#b17aff">回合结束剩 AP → 保留一半（向上取整，累积上限 5）到下回合</span><br>
+      <b>行动</b>：出牌(1AP) · 移动(1AP) · 夺取(2AP) · 过<br>
+      <b style="color:#7fd4a8">落子规则</b>：<span style="color:#7fd4a8">开局第一枚可落任意空格，之后必须挨着自己的棋子（区域扩张）</span><br>
+      <b style="color:#ff5c5c">吃牌规则</b>：<span style="color:#ff5c5c">
+        贴着目标落子即可吃。单张 / 对子要<b>点数大于对方</b>；<b>三条、同花、顺子无视点数强行吃</b>；同花顺只花 1 AP。<br>
+        被吃掉的牌<b>洗回牌堆底</b> —— 不退出游戏，也不进吃方手牌
+      </span><br>
+      <b style="color:#7fd4a8">连锁归属</b>：<span style="color:#7fd4a8">只统计<b>自己的</b>牌，蹭不了敌方的牌</span><br>
+      <b>连锁</b>：对子(+1AP/+1分) · 三条(+2/+3) · 四条(+4/+8) · 同花(+1AP/+L-1分) · 顺子(+L-1AP/+2L-3分) · 同花顺(+L-1AP/+3L-4分)<br>
+      <b>移动</b>：棋子连同底下的牌一起搬到相邻空格（不留残牌）<br>
+      <b>结算</b>：即时分 + 场上棋子数 + 每条行/列/对角线（己方≥3枚 +3分）<br>
+      <b style="color:#7fd4a8">结束条件</b>：<span style="color:#7fd4a8">棋盘 49 格占满 · 全员手牌用尽 · 或连续 8 手无人行动（防僵局）。分数不封顶</span>
+    </div>
+  </details>
+
+  <div class="hud">
+    <div class="hand" id="hand"></div>
+    <div class="btn-panel">
+      <div class="auto-draw-bar" id="autoDrawBar">🃏 每回合自动抽 1 张</div>
+      <div class="row r3">
+        <button id="btnHint">💡 提示</button>
+        <button id="btnPass">⏭ 过</button>
+        <button id="btnNew">🔄 重开</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================
+     结算
+     ================================================== -->
+<div class="overlay hidden" id="overlay">
+  <div class="result" id="result"></div>
+</div>
+
+<!-- 掷骰 -->
+<div class="overlay hidden" id="diceOverlay">
+  <div class="dice-panel">
+    <h2>🎲 掷骰决定先手</h2>
+    <div class="sub">点数最大者先出牌 · 平局重掷</div>
+    <div class="dice-grid" id="diceGrid"></div>
+    <div id="diceStatus">准备…</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     脚本（按依赖顺序加载）
+     ============================================================ -->
+<script src="js/01-config.js?v=23"></script>
+<script src="js/02-audio.js?v=23"></script>
+<script src="js/03-fx.js?v=23"></script>
+<script src="js/04-profile.js?v=23"></script>
+<script src="js/05-lobby.js?v=23"></script>
+<script src="js/06-game.js?v=23"></script>
+<script src="js/07-render.js?v=23"></script>
+<script src="js/08-net.js?v=23"></script>
+<script src="js/08-main.js?v=23"></script>
+</body>
+</html>
