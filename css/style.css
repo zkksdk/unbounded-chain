@@ -762,6 +762,20 @@
     100% { transform: scale(1) rotate(0); box-shadow: 0 3px 6px rgba(0,0,0,.45); }
   }
   .card.red { color: #cf2626; }
+
+  /* 王：金色发光，一眼可辨 */
+  .card.joker, .hcard.joker {
+    background: linear-gradient(155deg, #fff6cc 0%, #f5d97a 45%, #c9a227 100%);
+    color: #4a2c00 !important;
+    border: 1.5px solid #fff8d5;
+    box-shadow: 0 0 14px rgba(245,217,122,.85), 0 3px 8px rgba(0,0,0,.5);
+    animation: jokerGlow 1.8s ease-in-out infinite;
+  }
+  @keyframes jokerGlow {
+    0%,100% { filter: brightness(1); }
+    50% { filter: brightness(1.22); }
+  }
+  .hcard.joker:hover { box-shadow: 0 10px 24px rgba(0,0,0,.5), 0 0 26px rgba(245,217,122,.9); }
   .card .rank { font-size: 16px; line-height: 1.05; }
   .card .suit { font-size: 13px; line-height: 1; opacity: .9; }
 
