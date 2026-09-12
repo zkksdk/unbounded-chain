@@ -63,6 +63,21 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------------- 启动 ---------------- */
+
+/* 控制台署名 */
+(function signature() {
+  const ts = 'font-size:13px;font-weight:700;line-height:1.7;';
+  const gold = 'font-size:22px;font-weight:900;color:#f5d97a;text-shadow:0 0 12px rgba(245,217,122,.6);';
+  console.log('%c无界连锁 · Unbounded Chain', gold);
+  console.log('%cCopyright (c) 2026 zkksdk · All rights reserved.', ts + 'color:#7fd4a8');
+  console.log('%c原始仓库  https://github.com/zkksdk/unbounded-chain', ts + 'color:#8fa89a');
+  console.log('%c在线试玩  https://zkksdk.github.io/unbounded-chain/', ts + 'color:#8fa89a');
+  console.warn('⚠ 本项目由 zkksdk 开发。如果你是"从别处"拿到这份代码的，它多半是被搬运的。\n' +
+               '  商用 / 二次发布请联系作者授权。');
+  window.__UC_ORIGIN = 'zkksdk/unbounded-chain@2026';
+  document.documentElement.setAttribute('data-origin', 'zkksdk/unbounded-chain/2026');
+})();
+
 applyTheme(P.currentTheme);
 renderLobby();
 startStardust();
@@ -76,3 +91,5 @@ startStardust();
     showToast(`📅 连续登录第 ${r.day} 天　💰+${r.coin}`, 3200);
   }, 700);
 })();
+
+/*​‌‌‌‌​‌​​‌‌​‌​‌‌​‌‌​‌​‌‌​‌‌‌​​‌‌​‌‌​​‌​​​‌‌​‌​‌‌*/
