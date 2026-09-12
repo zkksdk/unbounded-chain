@@ -220,6 +220,18 @@ function newGame() {
     for (const p of G.players) p.hand.push(G.deck.pop());
   }
 
+  // 开局在棋盘上随机撒几张「王」—— 中立无主，谁先接到归谁
+  const kinds = ['big', 'small'];
+  const spots = [];
+  for (let i = 0; i < CELLS; i++) spots.push(i);
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = spots[i]; spots[i] = spots[j]; spots[j] = t;
+  }
+  for (let k = 0; k < Math.min(JOKER_COUNT, spots.length); k++) {
+    G.board[spots[k]] = { card: { v: 0, s: -1, joker: kinds[k % kinds.length] }, owner: NEUTRAL };
+  }
+
   document.getElementById('log').innerHTML = '';
   document.getElementById('logCount').textContent = '0';
   addLog(`🎴 新对局 · 7×7 · 4 人混战 · 牌堆 52 张`, 'sys');
@@ -387,7 +399,18 @@ function doPlay(handIdx, boardIdx) {
   G.ap -= 1;
   G.actedThisTurn = true;
   p.hand.splice(handIdx, 1);
+
+  // 王：落子前先定牌面（挑一个最能凑连锁的）
+  let jokerPick = null;
+  if (isJoker(card)) {
+    const face = bestJokerFace(card, boardIdx, G.turn);
+    card.v = face.v; card.s = face.s;
+    jokerPick = face;
+  }
+
   G.board[boardIdx] = { card, owner: G.turn };
+  // 落到王旁边就把王收了
+  const gotJokers = collectAdjacentJokers(boardIdx);
   G.selectedHand = -1;
   G.selectedPiece = -1;
   G.suggestCell = -1;
@@ -458,6 +481,9 @@ function doPlay(handIdx, boardIdx) {
     combos.forEach((combo, i) => {
       setTimeout(() => comboPop(c.x, c.y - 40 - i * 8, combo.name), i * 180);
     });
+    if (jokerPick) {
+      boomText(c.x, c.y + 26, '🃏 视作 ' + RANKS[jokerPick.v] + SUITS[jokerPick.s], 'fire', 30);
+    }
 
     // 得分大字
     setTimeout(() => {
@@ -590,20 +616,64 @@ function eatTierOf(combos) {
 /* 能否吃？返回 null=不能；否则 { ap, tier, label, ignoreRank, combos } */
 function canEat(idx, card, owner) {
   const t = G.board[idx];
-  if (!t || !t.card || t.owner === null || t.owner === owner) return null;
+  if (!t || !t.card || t.owner === null || t.owner < 0 || t.owner === owner) return null;
   if (!card) return null;
   if (!hasAdjacentOwnPiece(idx, owner)) return null;
 
-  const combos = simulatePlacement(G.board, idx, card, owner);
+  const testCard = jokerEatCard(card);
+  const combos = simulatePlacement(G.board, idx, testCard, owner);
   const info = eatTierOf(combos);
   const ignoreRank = info.tier >= 3;                    // 三条及以上无视点数
-  if (!ignoreRank && card.v <= t.card.v) return null;
+  if (!ignoreRank && testCard.v <= t.card.v) return null;
 
   return {
     ap: info.tier >= 5 ? 1 : 2,                         // 同花顺省 1 AP
     tier: info.tier, label: info.label,
     ignoreRank, combos, target: t
   };
+}
+
+/* 落子后，把相邻格上的中立王收进手里 */
+function collectAdjacentJokers(idx) {
+  const p = G.players[G.turn];
+  const r = rowOf(idx), c = colOf(idx);
+  let got = 0;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) continue;
+      const ni = idxOf(nr, nc);
+      const cell = G.board[ni];
+      if (cell && cell.owner === NEUTRAL && isJoker(cell.card)) {
+        p.hand.push(cell.card);
+        G.board[ni] = null;
+        got++;
+        addLog(`　🃏 <span class="${PLAYER_CLASSES[G.turn]}">${p.name}</span> 接到了 <span class="hl">${cardText(cell.card)}</span>！`, 'sys');
+      }
+    }
+  }
+  return got;
+}
+
+/* 王落子时自动挑一个「最能凑成连锁」的牌面 */
+function bestJokerFace(card, idx, owner) {
+  let best = null;
+  for (let s = 0; s < 4; s++) {
+    for (let v = 1; v <= 13; v++) {
+      const combos = simulatePlacement(G.board, idx, { v: v, s: s }, owner);
+      let sc = 0, ap = 0;
+      for (const c of combos) { sc += c.score; ap += c.ap; }
+      const total = sc * 100 + ap * 10 + v;   // 分优先，其次 AP，最后点数
+      if (!best || total > best.total) best = { total, v, s, sc, ap };
+    }
+  }
+  return best;
+}
+
+/* 王用于吃牌时视作 14 点（比 A 还大） */
+function jokerEatCard(card) {
+  return isJoker(card) ? { v: JOKER_EAT_VALUE, s: 0 } : card;
 }
 
 function doCapture(handIdx, boardIdx) {
@@ -1036,7 +1106,9 @@ function finishGame(reason) {
     }
     p.control = control;
     p.lineBonus = lineBonus;
-    p.total = p.score + control + lineBonus;
+    // 手里还留着的王 → 每张 +JOKER_HOLD_BONUS 分
+    p.jokerBonus = p.hand.filter(isJoker).length * JOKER_HOLD_BONUS;
+    p.total = p.score + control + lineBonus + p.jokerBonus;
   }
 
   const ranking = G.players.map((p, i) => ({ ...p, idx: i }))
@@ -1319,7 +1391,7 @@ function computeThreatZones() {
     
     for (let i = 0; i < CELLS; i++) {
       const t = G.board[i];
-      if (!t || !t.card || t.owner === null || t.owner === pid) continue; // 跳过空位、无牌格和自己的棋子
+      if (!t || !t.card || t.owner === null || t.owner < 0 || t.owner === pid) continue; // 跳过空位、中立王、无牌格
       // 检查是否有相邻的己方棋子
       if (hasAdjacentOwnPiece(i, pid)) {
         // 这个位置可以被pid夺取
