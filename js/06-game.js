@@ -211,7 +211,7 @@ function newGame() {
     })),
     turn: 0, ap: 0, bonusAP: 0,
     over: false, started: false, drewThisTurn: false,
-    passStreak: 0, actedThisTurn: false,
+    passStreak: 0, actedThisTurn: false, movesThisTurn: 0,
     selectedHand: -1, selectedPiece: -1,
     suggestCell: -1, suggestHand: -1
   };
@@ -268,6 +268,7 @@ function startTurn() {
   G.bonusAP = 0;
   G.actedThisTurn = false;
   G.drewThisTurn = true;      // 抽牌已改为每回合自动，不再手动抽
+  G.movesThisTurn = 0;        // 每回合移动次数清零
   G.selectedHand = -1;
   G.selectedPiece = -1;
   G.suggestCell = -1;
@@ -508,12 +509,17 @@ function doMove(from, to) {
   if (typeof NET !== 'undefined' && NET.mode === 'guest') return netIntent('move', { from: from, to: to });
   if ((G.players[G.turn].ai && !aiActing) || locked || G.over) return;
   if (G.ap < 1) { toast('行动点不足'); return; }
+  if ((G.movesThisTurn || 0) >= MOVE_LIMIT) {
+    toast(`每回合最多移动 ${MOVE_LIMIT} 次，本回合已经用完了`);
+    return;
+  }
   const src = G.board[from];
   if (!src || src.owner !== G.turn) return;
   if (G.board[to]) { toast('目标格已被占据'); return; }
   if (!adjacent(from, to)) { toast('只能移到相邻格'); return; }
 
   G.ap -= 1;
+  G.movesThisTurn = (G.movesThisTurn || 0) + 1;
   // 整枚棋子（连同底下的牌）一起搬过去，原格彻底空出
   // —— 不再产生「无主卡牌」和「有主无牌」两种畸形格子
   G.board[to] = src;
@@ -527,7 +533,8 @@ function doMove(from, to) {
     const c = centerOf(toEl);
     spawnParticles(c.x, c.y, 10, PLAYER_COLORS[G.turn], 100);
   }
-  addLog(`<span class="${PLAYER_CLASSES[G.turn]}">${G.players[G.turn].name}</span> 移动了一枚棋子`);
+  addLog(`<span class="${PLAYER_CLASSES[G.turn]}">${G.players[G.turn].name}</span> 移动了一枚棋子` +
+         ` <span class="sys">（本回合 ${G.movesThisTurn}/${MOVE_LIMIT}）</span>`);
   afterAction();
 }
 
@@ -778,7 +785,7 @@ function endTurn() {
 /* ---------------- AI ---------------- */
 /* AI 选一步「移动」：逃命优先，其次是把棋子挪到更有发展空间的位置 */
 function aiChooseMove(me) {
-  if (aiMoveCount >= 2) return null;   // 单回合最多挪 2 步，防止来回蹭
+  if ((G.movesThisTurn || 0) >= MOVE_LIMIT) return null;   // 移动次数用完了
   let best = null;
   for (let from = 0; from < CELLS; from++) {
     const c = G.board[from];
@@ -946,7 +953,7 @@ function aiStep(n) {
     try {
       if (act.type === 'play') doPlay(act.hi, act.bi);
       else if (act.type === 'capture') doCapture(act.hi, act.bi);
-      else if (act.type === 'move') { aiMoveCount++; doMove(act.from, act.to); }
+      else if (act.type === 'move') doMove(act.from, act.to);
     } finally {
       aiActing = false;
     }
@@ -1292,7 +1299,7 @@ function computeHints() {
       const eat = canEat(i, card, HUMAN);
       if (eat && G.ap >= eat.ap) capture[i] = true;
     }
-  } else if (G.selectedPiece >= 0 && G.ap >= 1) {
+  } else if (G.selectedPiece >= 0 && G.ap >= 1 && (G.movesThisTurn || 0) < MOVE_LIMIT) {
     for (let i = 0; i < CELLS; i++) {
       if (i === G.selectedPiece) continue;
       if (!G.board[i] && adjacent(G.selectedPiece, i)) move[i] = true;
