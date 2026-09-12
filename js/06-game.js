@@ -776,6 +776,62 @@ function endTurn() {
 }
 
 /* ---------------- AI ---------------- */
+/* AI 选一步「移动」：逃命优先，其次是把棋子挪到更有发展空间的位置 */
+function aiChooseMove(me) {
+  if (aiMoveCount >= 2) return null;   // 单回合最多挪 2 步，防止来回蹭
+  let best = null;
+  for (let from = 0; from < CELLS; from++) {
+    const c = G.board[from];
+    if (!c || !c.card || c.owner !== me) continue;
+    const r0 = rowOf(from), c0 = colOf(from);
+
+    // 这枚棋子被威胁吗？（相邻有敌方更大的牌，且对方贴着自己的子）
+    let threatened = false;
+    for (let dr = -1; dr <= 1 && !threatened; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nr = r0 + dr, nc = c0 + dc;
+        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) continue;
+        const t = G.board[idxOf(nr, nc)];
+        if (t && t.card && t.owner !== null && t.owner !== me && t.card.v > c.card.v) {
+          if (hasAdjacentOwnPiece(idxOf(nr, nc), t.owner)) { threatened = true; break; }
+        }
+      }
+    }
+
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nr = r0 + dr, nc = c0 + dc;
+        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) continue;
+        const to = idxOf(nr, nc);
+        if (G.board[to]) continue;
+
+        // 新位置周围有多少空格（发展空间）
+        let free = 0, ownNear = 0;
+        const tr = rowOf(to), tc = colOf(to);
+        for (let ar = -1; ar <= 1; ar++) {
+          for (let ac = -1; ac <= 1; ac++) {
+            if (!ar && !ac) continue;
+            const ar2 = tr + ar, ac2 = tc + ac;
+            if (ar2 < 0 || ar2 >= SIZE || ac2 < 0 || ac2 >= SIZE) continue;
+            const nb = G.board[idxOf(ar2, ac2)];
+            if (!nb) free++;
+            else if (nb.owner === me) ownNear++;
+          }
+        }
+
+        let score = free * 3 + centerValue(to) * 2;
+        if (threatened) score += 30;        // 逃命最优先
+        if (!threatened && score < 24) continue;   // 没威胁又不划算就别乱动
+
+        if (!best || score > best.score) best = { score, from: from, to: to };
+      }
+    }
+  }
+  return best;
+}
+
 function aiChooseAction() {
   const me = G.turn;
   const hand = G.players[me].hand;
@@ -809,11 +865,22 @@ function aiChooseAction() {
     }
     if (capBest) return { type: 'capture', hi: capBest.hi, bi: capBest.bi };
   }
+  // 有棋子正被威胁 → 先撤（但要留着 AP 发育，所以只在 AP ≥ 2 时才优先撤）
+  if (G.ap >= 2) {
+    const esc = aiChooseMove(me);
+    if (esc && esc.score >= 30) return { type: 'move', from: esc.from, to: esc.to };
+  }
   // 牌堆空时强制出最佳牌
   if (G.deck.length === 0 && best && best.sc > 0 && G.ap >= 1) {
     return { type: 'play', hi: best.hi, bi: best.bi, sc: best.sc };
   }
   if (best && empty.length > 0 && G.ap >= 1) return { type: 'play', hi: best.hi, bi: best.bi, sc: best.sc || 0 };
+
+  // 没牌可出、没人可吃 → 看看能不能挪一步（逃命 / 打开局面），挪不动才过
+  if (G.ap >= 1) {
+    const mv = aiChooseMove(me);
+    if (mv) return { type: 'move', from: mv.from, to: mv.to };
+  }
   return null;
 }
 
@@ -824,6 +891,7 @@ function aiChooseAction() {
    ------------------------------------------------------------ */
 let aiActing = false;      // AI 自己行动时置真，让行动函数放行
 let aiThinking = false;    // 正在"思考"，用于界面提示
+let aiMoveCount = 0;       // 本回合 AI 已经挪了几步
 
 const AI_PACE = {
   base:      [380, 720],    // 普通出牌
@@ -856,6 +924,7 @@ function aiThinkTime(act) {
 function aiTurn() {
   if (typeof NET !== 'undefined' && NET.mode === 'guest') return;  // AI 只在房主端跑
   if (!G || G.over) return;
+  aiMoveCount = 0;
   aiStep(0);
 }
 
@@ -877,6 +946,7 @@ function aiStep(n) {
     try {
       if (act.type === 'play') doPlay(act.hi, act.bi);
       else if (act.type === 'capture') doCapture(act.hi, act.bi);
+      else if (act.type === 'move') { aiMoveCount++; doMove(act.from, act.to); }
     } finally {
       aiActing = false;
     }
