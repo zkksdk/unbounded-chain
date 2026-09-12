@@ -44,6 +44,15 @@ function render() {
   if (apEl) apEl.textContent = G.ap;
   if (deckEl) deckEl.textContent = G.deck.length;
 
+  // 本回合剩余移动次数
+  const mvEl = document.getElementById('moveLeft');
+  if (mvEl) {
+    const used = G.movesThisTurn || 0;
+    const left = Math.max(0, MOVE_LIMIT - used);
+    mvEl.textContent = '移动 ' + left + '/' + MOVE_LIMIT;
+    mvEl.style.color = left > 0 ? '#9fb3a8' : '#6b7d74';
+  }
+
   // 抽牌已改为每回合自动，这里只更新提示条
   const bar = document.getElementById('autoDrawBar');
   if (bar) {
