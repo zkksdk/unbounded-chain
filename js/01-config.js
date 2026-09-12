@@ -15,6 +15,9 @@ const TARGET_SCORE = Infinity;   // 分数不封顶：不再因为达标而结�
 const MAX_BONUS_AP = 10;
 const CARRY_MAX = 5;             // 回合结束最多保留多少 AP 到下回合
 const MOVE_LIMIT = 2;            // 每回合最多移动几次（人类和 AI 都受限）
+const JOKER_HOLD_BONUS = 3;      // 终局时手里没用掉的王，每张 +3 分
+const JOKER_EAT_VALUE = 14;      // 王用于吃牌时视作的点数（比 A 大）
+const JOKER_COUNT = 2;           // 开局在棋盘上随机放置几张王
 const TURN_TIME = 30;
 
 const PLAYER_NAMES = ['蓝方', '红方', '橙方', '紫方'];   // 本地玩家会被改成「你」
@@ -45,8 +48,10 @@ function shuffle(a) {
   }
   return a;
 }
-const isRed = c => RED_SUITS.includes(c.s);
-const cardText = c => RANKS[c.v] + SUITS[c.s];
+const isRed = c => !c.joker && RED_SUITS.includes(c.s);
+const cardText = c => c.joker ? (c.joker === 'big' ? '大王' : '小王') : RANKS[c.v] + SUITS[c.s];
+const isJoker = c => !!(c && c.joker);
+const NEUTRAL = -1;              // 棋盘上的中立牌（大小王）的所有者标记
 const idxOf = (r, c) => r * SIZE + c;
 const rowOf = i => Math.floor(i / SIZE);
 const colOf = i => i % SIZE;
