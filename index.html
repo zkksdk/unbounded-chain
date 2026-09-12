@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>无界连锁 · Unbounded Chain</title>
-<link rel="stylesheet" href="css/style.css?v=30">
+<link rel="stylesheet" href="css/style.css?v=31">
 </head>
 <body>
 <canvas id="fxCanvas"></canvas>
@@ -122,6 +122,7 @@
         <div class="left">
           <span>行动点 <b id="ap">1</b></span>
           <span class="timer" id="timer">⏱ 30s</span>
+          <span id="moveLeft" style="color:#9fb3a8">移动 2/2</span>
         </div>
         <span style="color:#7c9488;font-size:11.5px">绿=可落子 · 金=能连锁 · <b style="color:#ff5c5c">红=可吃牌</b></span>
       </div>
@@ -152,7 +153,7 @@
       <b style="color:#7fd4a8">抽牌</b>：<span style="color:#7fd4a8">每回合开始系统自动抽 1 张，<b>不消耗 AP</b>，无需手动操作</span><br>
       <b>AP</b>：每回合 1 基础 + 连锁返还（最多 +10）+ 上回合保留<br>
       <b style="color:#b17aff">保留机制</b>：<span style="color:#b17aff">回合结束剩 AP → 保留一半（向上取整，累积上限 5）到下回合</span><br>
-      <b>行动</b>：出牌(1AP) · 移动(1AP) · 夺取(2AP) · 过<br>
+      <b>行动</b>：出牌(1AP) · 移动(1AP，<b style="color:#f5d97a">每回合限 2 次</b>) · 夺取(2AP) · 过<br>
       <b style="color:#7fd4a8">落子规则</b>：<span style="color:#7fd4a8">开局第一枚可落任意空格，之后必须挨着自己的棋子（区域扩张）</span><br>
       <b style="color:#ff5c5c">吃牌规则</b>：<span style="color:#ff5c5c">
         贴着目标落子即可吃。单张 / 对子要<b>点数大于对方</b>；<b>三条、同花、顺子无视点数强行吃</b>；同花顺只花 1 AP。<br>
@@ -199,14 +200,14 @@
 <!-- ============================================================
      脚本（按依赖顺序加载）
      ============================================================ -->
-<script src="js/01-config.js?v=30"></script>
-<script src="js/02-audio.js?v=30"></script>
-<script src="js/03-fx.js?v=30"></script>
-<script src="js/04-profile.js?v=30"></script>
-<script src="js/05-lobby.js?v=30"></script>
-<script src="js/06-game.js?v=30"></script>
-<script src="js/07-render.js?v=30"></script>
-<script src="js/08-net.js?v=30"></script>
-<script src="js/08-main.js?v=30"></script>
+<script src="js/01-config.js?v=31"></script>
+<script src="js/02-audio.js?v=31"></script>
+<script src="js/03-fx.js?v=31"></script>
+<script src="js/04-profile.js?v=31"></script>
+<script src="js/05-lobby.js?v=31"></script>
+<script src="js/06-game.js?v=31"></script>
+<script src="js/07-render.js?v=31"></script>
+<script src="js/08-net.js?v=31"></script>
+<script src="js/08-main.js?v=31"></script>
 </body>
 </html>
