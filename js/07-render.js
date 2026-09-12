@@ -197,9 +197,17 @@ function renderBoard() {
       const old = d.querySelector('.card');
       if (old) old.remove();
       if (cardKey) {
+        const c = cell.card;
         const cd = document.createElement('div');
-        cd.className = 'card' + (isRed(cell.card) ? ' red' : '');
-        cd.innerHTML = `<span class="rank">${RANKS[cell.card.v]}</span><span class="suit">${SUITS[cell.card.s]}</span>`;
+        if (isJoker(c)) {
+          cd.className = 'card joker';
+          cd.innerHTML = c.v
+            ? `<span class="rank">${RANKS[c.v]}</span><span class="suit">${SUITS[c.s]}</span>`
+            : `<span class="rank">🃏</span><span class="suit">${c.joker === 'big' ? '大王' : '小王'}</span>`;
+        } else {
+          cd.className = 'card' + (isRed(c) ? ' red' : '');
+          cd.innerHTML = `<span class="rank">${RANKS[c.v]}</span><span class="suit">${SUITS[c.s]}</span>`;
+        }
         d.appendChild(cd);
       }
     }
@@ -266,9 +274,11 @@ function renderHand() {
 
     me.hand.forEach((card, i) => {
       const d = document.createElement('div');
-      d.className = 'hcard' + (isRed(card) ? ' red' : '') + (G.selectedHand === i ? ' sel' : '');
+      d.className = 'hcard' + (isJoker(card) ? ' joker' : (isRed(card) ? ' red' : '')) + (G.selectedHand === i ? ' sel' : '');
       if (G.suggestHand === i) d.classList.add('hintglow');
-      d.innerHTML = `<span class="rank">${RANKS[card.v]}</span><span class="suit">${SUITS[card.s]}</span>`;
+      d.innerHTML = isJoker(card)
+        ? `<span class="rank">🃏</span><span class="suit">${card.joker === 'big' ? '大王' : '小王'}</span>`
+        : `<span class="rank">${RANKS[card.v]}</span><span class="suit">${SUITS[card.s]}</span>`;
       d.addEventListener('click', () => {
         if (locked || G.over || !G.started || G.turn !== HUMAN) return;
         G.selectedHand = (G.selectedHand === i) ? -1 : i;
