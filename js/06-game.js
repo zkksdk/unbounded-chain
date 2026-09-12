@@ -317,6 +317,7 @@ function addLog(text, cls = '') {
 }
 
 /* ---------------- 计时器 ---------------- */
+let netLastTickSec = -1;
 function startTimer() {
   stopTimer();
   timeLeft = TURN_TIME;
@@ -326,7 +327,11 @@ function startTimer() {
     if (!G || G.over) { stopTimer(); return; }
     if (G.players[G.turn].ai) { stopTimer(); return; }
     timeLeft -= 0.1;
-    if (NET.mode === 'host') netHostTick();
+    // 只在「整秒」变化时推一次 tick（原来每 100ms 推一次，30 秒 300 条消息太浪费）
+    if (NET.mode === 'host') {
+      const sec = Math.ceil(timeLeft);
+      if (sec !== netLastTickSec) { netLastTickSec = sec; netHostTick(); }
+    }
     if (timeLeft <= 0) {
       timeLeft = 0;
       updateTimerDisplay();
