@@ -148,14 +148,48 @@ function netHostSpawnPeer(joinMsg) {
   if (seat < 0) { sigPublish({ k: 'full', to: gid, from: NET.myId }); return; }
 
   const pc = new RTCPeerConnection(ICE_CONFIG);
-  const peer = { id: gid, name: joinMsg.name || ('玩家' + (seat + 1)), seat: seat, pc: pc, dc: null, dcOpen: false };
+  const peer = { id: gid, name: joinMsg.name || ('玩家' + (seat + 1)), seat: seat, pc: pc, dc: null, dcOpen: false, tries: 0 };
   NET.peers.push(peer);
 
   pc.onicecandidate = e => { if (e.candidate) peer.ice = (peer.ice || []).concat(e.candidate.candidate); };
+
+  // 连接状态变化：断线先尝试 ICE 重启自愈，失败才把座位交回 AI
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-      netSetStatusOnly('⚠ 与 ' + peer.name + ' 的连接中断');
+    const st = pc.connectionState;
+    if (st === 'connected') {
+      peer.dcOpen = (peer.dc && peer.dc.readyState === 'open');
+      peer.tries = 0;
+      netLog('🔗 与 ' + peer.name + ' 的直连已就绪');
+      netRenderPanel();
+    } else if (st === 'failed') {
+      peer.tries = (peer.tries || 0) + 1;
+      if (peer.tries <= 2) {
+        netLog('⚠ 与 ' + peer.name + ' 的连接中断，尝试重连（' + peer.tries + '/2）…');
+        netRenderPanel();
+        try { pc.restartIce(); } catch (e) {}
+      } else {
+        peer.dcOpen = false;
+        NET.seats[seat] = null;
+        netLog('❌ 与 ' + peer.name + ' 断开，座位 ' + (seat + 1) + ' 已交回 AI');
+        netHostBroadcastRoster();
+        netRenderPanel();
+      }
+    } else if (st === 'disconnected') {
+      netLog('⚠ 与 ' + peer.name + ' 的连接不稳定…');
+      netRenderPanel();
     }
+  };
+
+  // ICE 重启后会触发协商，需要重新发一次 offer
+  pc.onnegotiationneeded = async () => {
+    if (peer.tries === 0) return;          // 首次由下面的 createOffer 负责
+    try {
+      const o = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(o);
+      await waitIce(pc);
+      await sigSendChunked({ k: 'offer', to: peer.id, from: NET.myId, restart: 1 }, pc.localDescription.sdp);
+      netLog('🔄 已向 ' + peer.name + ' 发起重连…');
+    } catch (e) { netLog('重连失败：' + e.message); }
   };
 
   const dc = pc.createDataChannel('uc', { ordered: true });
@@ -173,6 +207,7 @@ function netHostSpawnPeer(joinMsg) {
     peer.dcOpen = false;
     NET.seats[seat] = null;
     netLog('⚠ ' + peer.name + ' 已离开');
+    netHostBroadcastRoster();
     netRenderPanel();
   };
   dc.onmessage = ev => hostOnMessage(peer, ev.data);
@@ -226,19 +261,30 @@ function netGuestJoin(code) {
 }
 
 function netGuestAnswer(offerSdp) {
-  const pc = new RTCPeerConnection(ICE_CONFIG);
-  NET.pc = pc;
-  pc.ondatachannel = ev => {
-    const dc = ev.channel;
-    NET.dc = dc;
-    dc.onopen = () => {
-      netStopPolling();          // 已直连，信令通道可以关了
-      netLog('✅ 已连上房主，等待开始…');
-      netRenderPanel();
+  // 重连时复用已有的 PeerConnection（DataChannel 已在，不用重建）
+  let pc = NET.pc;
+  if (!pc || pc.connectionState === 'closed') {
+    pc = new RTCPeerConnection(ICE_CONFIG);
+    NET.pc = pc;
+    pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
+      if (st === 'connected') { netLog('🔗 与房主的直连已就绪'); netRenderPanel(); }
+      else if (st === 'failed') { netLog('⚠ 与房主断开，正在自动重连…'); netRenderPanel(); }
+      else if (st === 'disconnected') { netLog('⚠ 网络不稳定…'); netRenderPanel(); }
     };
-    dc.onclose = () => { netLog('⚠ 与房主断开'); netRenderPanel(); };
-    dc.onmessage = e => guestOnMessage(e.data);
-  };
+    pc.ondatachannel = ev => {
+      const dc = ev.channel;
+      NET.dc = dc;
+      dc.onopen = () => {
+        // 信令保持连接：断线重连时还要用它换新的 SDP
+        netLog('✅ 已连上房主，等待开始…');
+        netRenderPanel();
+      };
+      dc.onclose = () => { netLog('⚠ 与房主断开'); netRenderPanel(); };
+      dc.onmessage = e => guestOnMessage(e.data);
+    };
+  }
+
   pc.setRemoteDescription({ type: 'offer', sdp: offerSdp })
     .then(() => pc.createAnswer())
     .then(a => pc.setLocalDescription(a))
@@ -259,21 +305,32 @@ function netGuestTeardown() {
 /* ---------------- 数据通道 ---------------- */
 function hostOnMessage(peer, data) {
   let m;
-  try { m = JSON.parse(data); } catch (e) { return; }
+  try { m = JSON.parse(data); } catch (e) { netLog('⚠ 收到 ' + peer.name + ' 的乱码消息'); return; }
   if (m.k === 'hello') { peer.name = m.name || peer.name; netHostBroadcastRoster(); return; }
   if (m.k === 'act') { netHostApplyIntent(peer, m); return; }
+  if (m.k === 'emoji') { return; }
+  netLog('⚠ 收到未知消息 ' + m.k);
 }
 
 function netHostApplyIntent(peer, m) {
-  if (!G || G.over) return;
-  if (G.turn !== peer.seat) return;   // 不是他的回合
+  if (!G || G.over) { netLog('⚠ ' + peer.name + ' 的操作被丢弃（对局未开始或已结束）'); return; }
+  if (G.turn !== peer.seat) {
+    // 常见于：客人本地快照还没刷到最新，点了不该他操作的一手
+    netLog('⚠ ' + peer.name + '（座位 ' + (peer.seat + 1) + '）的操作被忽略：当前是 ' +
+           G.players[G.turn].name + ' 的回合');
+    return;
+  }
   const p = m.p || {};
+  const apBefore = G.ap;
   switch (m.a) {
     case 'play':    doPlay(p.hi, p.bi); break;
     case 'draw':    doDraw(p.n); break;
     case 'capture': doCapture(p.hi, p.bi); break;
     case 'move':    doMove(p.from, p.to); break;
     case 'pass':    doPass(); break;
+  }
+  if (G.ap === apBefore && m.a !== 'pass') {
+    netLog('⚠ ' + peer.name + ' 的操作没生效（AP 未变化），可能是落点非法');
   }
 }
 
@@ -305,8 +362,9 @@ function netPackG() {
   return {
     board: G.board,
     deck: G.deck,
-    players: G.players.map(p => ({
-      name: p.name, ai: !!p.ai, score: p.score, hand: p.hand,
+    players: G.players.map((p, i) => ({
+      name: PLAYER_NAMES[i],   // 只发中性名（按颜色），各端自己把本地座位改成「你」
+      ai: !!p.ai, score: p.score, hand: p.hand,
       carryAP: p.carryAP || 0, control: p.control || 0,
       lineBonus: p.lineBonus || 0, total: p.total || 0
     })),
@@ -366,6 +424,8 @@ function netApplySnap(s) {
   G = s.G;
   Object.assign(G, keep);
   locked = false;   // 客人端不做本地锁定，一律由房主仲裁
+  // 把本地座位显示成「你」（房主发的都是中性名）
+  if (G.players && G.players[NET.mySeat]) G.players[NET.mySeat].name = '你';
   if (typeof s.t === 'number') timeLeft = s.t;
   if (typeof s.seats !== 'undefined') NET.seats = s.seats;
   if (typeof s.lg === 'number') logCount = s.lg;
@@ -419,6 +479,27 @@ function netLeave() {
 }
 
 /* ---------------- 联机面板 UI ---------------- */
+/* 复制房间号（clipboard API 失败时退回 execCommand） */
+function netCopyCode() {
+  const code = NET.room.slice(3);
+  const done = () => showToast('📋 房间号已复制：' + code);
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      ta.style.cssText = 'position:fixed;top:-1000px;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      done();
+    } catch (e) { showToast('复制失败，请手动记下：' + code); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(done).catch(fallback);
+  } else fallback();
+}
+
 function netRenderPanel() {
   const el = document.getElementById('netBody');
   if (!el) return;
@@ -441,16 +522,31 @@ function netRenderPanel() {
 
   if (NET.mode === 'host') {
     const n = netSeatCount();
+    const peerRows = NET.peers.map(p => {
+      let dot, txt;
+      if (p.dcOpen && p.pc && p.pc.connectionState === 'connected') { dot = '#7fd4a8'; txt = '已连接'; }
+      else if (p.dcOpen) { dot = '#f5d97a'; txt = '延迟中'; }
+      else if (p.pc && p.pc.connectionState === 'failed') { dot = '#ff5c5c'; txt = '已断开'; }
+      else { dot = '#ffa94d'; txt = '连接中'; }
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${dot};box-shadow:0 0 8px ${dot};flex-shrink:0"></span>
+        <span style="color:#d6e8de;flex:1">${p.name}</span>
+        <span style="color:#8fa89a;font-size:11px">座位 ${p.seat + 1}</span>
+        <span style="color:${dot};font-size:11px;font-weight:700">${txt}</span>
+      </div>`;
+    }).join('');
+
     el.innerHTML = `
       <div style="text-align:center;margin-bottom:12px">
         <div style="font-size:11px;color:#8fa89a;letter-spacing:2px">房间号</div>
-        <div style="font-size:34px;font-weight:900;letter-spacing:8px;color:#f5d97a;
+        <div id="netRoomCode" style="font-size:34px;font-weight:900;letter-spacing:8px;color:#f5d97a;
                     text-shadow:0 0 20px rgba(245,217,122,.6);margin:4px 0">${NET.room.slice(3)}</div>
-        <div style="font-size:11.5px;color:#8fa89a">让好友打开游戏 → 加入房间 → 输入这个号码</div>
+        <button id="netCopyBtn" style="width:auto;margin:0 auto;padding:7px 16px;font-size:12px;letter-spacing:1px">📋 复制房间号</button>
+        <div style="font-size:11.5px;color:#8fa89a;margin-top:8px">让好友打开同一网址 → 加入房间 → 输入这个号码</div>
       </div>
-      <div style="font-size:12.5px;color:#b9c9c0;margin-bottom:10px">
-        👥 已就座 <b style="color:#f5d97a">${n}</b> / 4　
-        ${NET.peers.map(p => `<span style="color:${p.dcOpen ? '#7fd4a8' : '#ff9f6e'}">${p.name}${p.dcOpen ? '✓' : '…'}</span>`).join('　') || '<span style="color:#8fa89a">等待中</span>'}
+      <div style="background:rgba(0,0,0,.25);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+        <div style="font-size:11.5px;color:#c9b06a;font-weight:800;margin-bottom:4px">👥 已就座 ${n} / 4</div>
+        ${peerRows || '<div style="font-size:12px;color:#8fa89a;padding:4px 0">等待玩家加入…</div>'}
       </div>
       <div id="netStatus" style="font-size:11.5px;color:#8fa89a;margin-bottom:10px">${NET.status}</div>
       <div class="row r3" style="grid-template-columns:2fr 1fr;gap:8px">
@@ -460,17 +556,39 @@ function netRenderPanel() {
     `;
     document.getElementById('netStartBtn').addEventListener('click', netHostStartMatch);
     document.getElementById('netLeaveBtn').addEventListener('click', netLeave);
+    document.getElementById('netCopyBtn').addEventListener('click', netCopyCode);
     return;
   }
 
+  // ---- 客人端 ----
+  let dot = '#ffa94d', stateTxt = '连接中…';
+  const pcs = NET.pc ? NET.pc.connectionState : 'new';
+  if (pcs === 'connected') { dot = '#7fd4a8'; stateTxt = '已直连房主'; }
+  else if (pcs === 'failed' || pcs === 'disconnected' || pcs === 'closed') { dot = '#ff5c5c'; stateTxt = '连接已断开'; }
+  else if (NET.mySeat >= 0) { dot = '#f5d97a'; stateTxt = '等待房主开始…'; }
+
   el.innerHTML = `
-    <div style="text-align:center;font-size:12.5px;color:#8fa89a;margin-bottom:12px">
-      房间 <b style="color:#f5d97a;letter-spacing:2px">${NET.room.slice(3)}</b><br>
-      <span id="netStatus">${NET.status}</span>
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-size:11px;color:#8fa89a;letter-spacing:2px">房间</div>
+      <div style="font-size:26px;font-weight:900;letter-spacing:6px;color:#f5d97a;margin:4px 0">${NET.room.slice(3)}</div>
+      <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#d6e8de">
+        <span style="width:8px;height:8px;border-radius:50%;background:${dot};box-shadow:0 0 8px ${dot}"></span>
+        ${stateTxt}
+      </div>
+      ${NET.mySeat >= 0 ? `<div style="font-size:11.5px;color:#8fa89a;margin-top:6px">你的座位：${NET.mySeat + 1} 号</div>` : ''}
     </div>
-    <button id="netLeaveBtn" style="width:100%">✕ 断开</button>
+    <div id="netStatus" style="font-size:11.5px;color:#8fa89a;margin-bottom:10px;text-align:center;min-height:18px">${NET.status}</div>
+    <div class="row r3" style="grid-template-columns:1fr 1fr;gap:8px">
+      <button id="netRetryBtn">↻ 重新加入</button>
+      <button id="netLeaveBtn">✕ 断开</button>
+    </div>
   `;
   document.getElementById('netLeaveBtn').addEventListener('click', netLeave);
+  document.getElementById('netRetryBtn').addEventListener('click', () => {
+    const code = NET.room.slice(3);
+    netGuestTeardown();
+    netGuestJoin(code);
+  });
 }
 
 function netRenderJoinForm() {
