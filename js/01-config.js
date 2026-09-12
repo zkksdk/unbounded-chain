@@ -14,6 +14,7 @@ const RED_SUITS = [1, 2];
 const TARGET_SCORE = Infinity;   // 分数不封顶：不再因为达标而结束对局
 const MAX_BONUS_AP = 10;
 const CARRY_MAX = 5;             // 回合结束最多保留多少 AP 到下回合
+const MOVE_LIMIT = 2;            // 每回合最多移动几次（人类和 AI 都受限）
 const TURN_TIME = 30;
 
 const PLAYER_NAMES = ['蓝方', '红方', '橙方', '紫方'];   // 本地玩家会被改成「你」
