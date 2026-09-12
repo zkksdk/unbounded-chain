@@ -1,5 +1,9 @@
 # 无界连锁 · Unbounded Chain
 
+> **Copyright (c) 2026 [zkksdk](https://github.com/zkksdk) · All rights reserved.**
+> 原始仓库：https://github.com/zkksdk/unbounded-chain ｜ 在线试玩：https://zkksdk.github.io/unbounded-chain/
+> 未经授权请勿商用。转载 / 二次发布请保留署名。详见 [LICENSE.md](LICENSE.md)
+
 7×7 棋盘 · 4 人卡牌对战 · 支持**局域网联机**。
 
 ## 运行
