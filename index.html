@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>无界连锁 · Unbounded Chain</title>
-<link rel="stylesheet" href="css/style.css?v=31">
+<link rel="stylesheet" href="css/style.css?v=33">
 </head>
 <body>
 <canvas id="fxCanvas"></canvas>
@@ -148,7 +148,10 @@
   <details style="font-size:12px;color:#7c9488;padding:0 4px;line-height:1.7;margin-top:10px">
     <summary style="cursor:pointer;color:#a8bfb2">📖 规则速查</summary>
     <div style="margin-top:8px">
-      <b>棋盘</b>：7×7 · <b>玩家</b>：你 + 3 AI · <b>牌堆</b>：52 张<br>
+      <b>棋盘</b>：7×7 · <b>玩家</b>：你 + 3 AI · <b>牌堆</b>：52 张 · <b style="color:#f5d97a">大小王各 1 张</b><br>
+      <b style="color:#f5d97a">👑 王</b>：<span style="color:#f5d97a">开局随机撒在棋盘上（中立金色卡）。把牌落在王旁边 → <b>王进你手牌</b>；<br>
+      　　王是<b>万能牌</b>，落子时自动变成最能凑连锁的牌面；吃牌时视作 14 点（比 A 大）；<br>
+      　　终局手里没用的王每张 <b>+3 分</b> —— 用掉还是留着，自己权衡</span><br>
       <b>开局</b>：掷骰定先手，后手第一回合 <b>+1 AP</b> 作为补偿<br>
       <b style="color:#7fd4a8">抽牌</b>：<span style="color:#7fd4a8">每回合开始系统自动抽 1 张，<b>不消耗 AP</b>，无需手动操作</span><br>
       <b>AP</b>：每回合 1 基础 + 连锁返还（最多 +10）+ 上回合保留<br>
@@ -200,14 +203,14 @@
 <!-- ============================================================
      脚本（按依赖顺序加载）
      ============================================================ -->
-<script src="js/01-config.js?v=31"></script>
-<script src="js/02-audio.js?v=31"></script>
-<script src="js/03-fx.js?v=31"></script>
-<script src="js/04-profile.js?v=31"></script>
-<script src="js/05-lobby.js?v=31"></script>
-<script src="js/06-game.js?v=31"></script>
-<script src="js/07-render.js?v=31"></script>
-<script src="js/08-net.js?v=31"></script>
-<script src="js/08-main.js?v=31"></script>
+<script src="js/01-config.js?v=33"></script>
+<script src="js/02-audio.js?v=33"></script>
+<script src="js/03-fx.js?v=33"></script>
+<script src="js/04-profile.js?v=33"></script>
+<script src="js/05-lobby.js?v=33"></script>
+<script src="js/06-game.js?v=33"></script>
+<script src="js/07-render.js?v=33"></script>
+<script src="js/08-net.js?v=33"></script>
+<script src="js/08-main.js?v=33"></script>
 </body>
 </html>
